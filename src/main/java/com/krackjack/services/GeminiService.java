@@ -25,8 +25,8 @@ public class GeminiService {
     @Autowired
     private RestTemplate restTemplate;
 
-    public String generateResponse(String transcription, String context) {
-        logger.info("Generating response for transcription: {}", transcription);
+    public String generateResponse(String input, String context) {
+        logger.info("Generating response for input: {}", input);
         logger.debug("Context: {}", context);
 
         HttpHeaders headers = new HttpHeaders();
@@ -38,7 +38,19 @@ public class GeminiService {
         JSONObject content = new JSONObject();
         content.put("role", "user");
         content.put("parts", new JSONArray().put(new JSONObject().put("text",
-                String.format("Context: %s\n\nUser: %s\n\nAssistant:", context, transcription))));
+                String.format(
+                        "You are an interviewee giving a job interview. " +
+                                "The interview context is as follows:\n\n" +
+                                "%s\n\n" +
+                                "Based on this context, provide a relevant and insightful response to the following input from the interviewer:\n\n"
+                                +
+                                "Interviewer: %s\n\n" +
+                                "Your response should be professional, engaging, and tailored to the job and interviewee's background. "
+                                +
+                                "If the input is a question, answer it thoroughly. If it's a statement, provide relevant follow-up or insights. "
+                                +
+                                "Keep your response concise but informative.",
+                        context, input))));
         contents.put(content);
         requestBody.put("contents", contents);
 
