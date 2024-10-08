@@ -25,12 +25,27 @@ public class InterviewWebSocketHandler extends BinaryWebSocketHandler {
     private final Map<WebSocketSession, String> sessionContexts = new ConcurrentHashMap<>();
 
     public InterviewWebSocketHandler(SpeechToTextService speechToTextService,
-                                     GeminiService geminiService,
-                                     ObjectMapper objectMapper) {
+            GeminiService geminiService,
+            ObjectMapper objectMapper) {
         this.speechToTextService = speechToTextService;
         this.geminiService = geminiService;
         this.objectMapper = objectMapper;
         logger.info("InterviewWebSocketHandler initialized");
+    }
+
+    public String setContext(WebSocketSession session, String jobDescription, String intervieweeBackground) {
+        logger.info("Setting context for session: {}", session.getId());
+        String context = String.format("Job Description: %s | Interviewee Background: %s", jobDescription,
+                intervieweeBackground);
+        try {
+            sessionContexts.put(session, context);
+            session.sendMessage(new TextMessage("{\"type\":\"context_set\"}"));
+            logger.info("Context set successfully for session: {}", session.getId());
+        } catch (IOException e) {
+            logger.error("Error setting context for session: {}", session.getId(), e);
+            throw new RuntimeException("Failed to set context", e);
+        }
+        return context;
     }
 
     @Override
@@ -39,40 +54,60 @@ public class InterviewWebSocketHandler extends BinaryWebSocketHandler {
             logger.info("Received text message from session: {}", session.getId());
             Map<String, String> setupData = objectMapper.readValue(message.getPayload(), Map.class);
             if ("setup".equals(setupData.get("type"))) {
-                String context = setupData.get("jobDescription") + " | " + setupData.get("intervieweeBackground");
-                sessionContexts.put(session, context);
+                setContext(session, setupData.get("jobDescription"), setupData.get("intervieweeBackground"));
                 logger.info("Setup completed for session: {}", session.getId());
-                session.sendMessage(new TextMessage("{\"type\":\"setup_complete\"}"));
-                logger.debug("Sent setup_complete message to session: {}", session.getId());
             }
         } catch (IOException e) {
             logger.error("Error handling text message for session: {}", session.getId(), e);
-            throw new RuntimeException(e);
+            try {
+                session.sendMessage(
+                        new TextMessage("{\"type\":\"error\",\"message\":\"Failed to process setup message\"}"));
+            } catch (IOException sendError) {
+                logger.error("Failed to send error message to client", sendError);
+            }
         }
     }
 
     @Override
-    protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) throws IOException {
-        logger.info("Received binary message from session: {}", session.getId());
-        byte[] audioData = message.getPayload().array();
-        logger.debug("Audio data size: {} bytes", audioData.length);
+    protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) {
+        try {
+            logger.info("Received binary message from session: {}", session.getId());
+            byte[] audioData = message.getPayload().array();
+            logger.debug("Audio data size: {} bytes", audioData.length);
 
-        String transcription = speechToTextService.transcribe(audioData);
-        logger.info("Transcription completed for session: {}", session.getId());
+            String transcription = speechToTextService.transcribe(audioData);
+            logger.info("Transcription completed for session: {}", session.getId());
 
-        session.sendMessage(new TextMessage(objectMapper.writeValueAsString(
-                Map.of("type", "transcription", "content", transcription)
-        )));
-        logger.debug("Sent transcription to session: {}", session.getId());
+            sendMessageToClient(session, "transcription", transcription);
 
-        String context = sessionContexts.get(session);
-        String geminiResponse = geminiService.generateResponse(transcription, context);
-        logger.info("Gemini response generated for session: {}", session.getId());
+            String context = sessionContexts.get(session);
+            if (context == null) {
+                logger.warn("No context found for session: {}. Using empty context.", session.getId());
+                context = "";
+            }
+            String geminiResponse = geminiService.generateResponse(transcription, context);
+            logger.info("Gemini response generated for session: {}", session.getId());
 
-        session.sendMessage(new TextMessage(objectMapper.writeValueAsString(
-                Map.of("type", "assistant_response", "content", geminiResponse)
-        )));
-        logger.debug("Sent assistant response to session: {}", session.getId());
+            sendMessageToClient(session, "assistant_response", geminiResponse);
+        } catch (Exception e) {
+            logger.error("Error processing binary message for session: {}", session.getId(), e);
+            try {
+                session.sendMessage(
+                        new TextMessage("{\"type\":\"error\",\"message\":\"Failed to process audio data\"}"));
+            } catch (IOException sendError) {
+                logger.error("Failed to send error message to client", sendError);
+            }
+        }
+    }
+
+    private void sendMessageToClient(WebSocketSession session, String type, String content) {
+        try {
+            session.sendMessage(new TextMessage(objectMapper.writeValueAsString(
+                    Map.of("type", type, "content", content))));
+            logger.debug("Sent {} to session: {}", type, session.getId());
+        } catch (IOException e) {
+            logger.error("Failed to send {} to client for session: {}", type, session.getId(), e);
+        }
     }
 
     @Override
