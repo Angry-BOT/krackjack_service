@@ -78,6 +78,11 @@ public class InterviewWebSocketHandler extends BinaryWebSocketHandler {
             String transcription = speechToTextService.transcribe(audioData);
             logger.info("Transcription completed for session: {}", session.getId());
 
+            if (!speechToTextService.isValidTranscription(transcription)) {
+                sendMessageToClient(session, "error", "Could not process audio due to disturbance or silence");
+                return;
+            }
+
             sendMessageToClient(session, "transcription", transcription);
 
             String context = sessionContexts.get(session);
