@@ -71,4 +71,33 @@ public class SpeechToTextService {
         logger.info("Transcription result: {}", transcription);
         return transcription;
     }
+
+    public boolean isValidTranscription(String transcription) {
+        if (transcription == null || transcription.trim().isEmpty()) {
+            logger.warn("Transcription is empty or null");
+            return false;
+        }
+
+        // Check if transcription contains only noise indicators
+        String cleanText = transcription.toLowerCase().trim();
+        String[] noiseIndicators = { "[noise]", "[background noise]", "[inaudible]", "[silence]", "*silence*",
+                "*noise*" };
+
+        for (String indicator : noiseIndicators) {
+            cleanText = cleanText.replace(indicator, "").trim();
+        }
+
+        if (cleanText.isEmpty()) {
+            logger.warn("Transcription contains only noise indicators");
+            return false;
+        }
+
+        // Check if transcription is too short (less than 2 words)
+        if (cleanText.split("\\s+").length < 2) {
+            logger.warn("Transcription is too short: {}", transcription);
+            return false;
+        }
+
+        return true;
+    }
 }
