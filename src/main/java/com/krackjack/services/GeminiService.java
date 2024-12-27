@@ -20,7 +20,9 @@ public class GeminiService {
         @Value("${gemini.api.key}")
         private String apiKey;
 
-        private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
+        private static final String GEMINI_API_1_5_FLASH_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+        private static final String GEMINI_API_2_0_FLASH_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent";
+        private static final String GEMINI_API_1_5_FLASH_8B_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent";
 
         @Autowired
         private RestTemplate restTemplate;
@@ -58,7 +60,7 @@ public class GeminiService {
 
                 logger.debug("Sending request to Gemini API: {}", requestBody);
 
-                String response = restTemplate.postForObject(GEMINI_API_URL, request, String.class);
+                String response = restTemplate.postForObject(GEMINI_API_2_0_FLASH_URL, request, String.class);
                 logger.debug("Received response from Gemini API: {}", response);
 
                 JSONObject jsonResponse = new JSONObject(response);

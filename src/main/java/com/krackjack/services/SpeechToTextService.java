@@ -20,8 +20,9 @@ public class SpeechToTextService {
     @Value("${gemini.api.key}")
     private String apiKey;
 
-    private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
-
+    private static final String GEMINI_API_1_5_FLASH_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+    private static final String GEMINI_API_2_0_FLASH_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent";
+    private static final String GEMINI_API_1_5_FLASH_8B_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent";
     private final RestTemplate restTemplate;
 
     public SpeechToTextService(RestTemplate restTemplate) {
@@ -56,7 +57,7 @@ public class SpeechToTextService {
 
         logger.debug("Sending request to Gemini API for transcription");
 
-        String response = restTemplate.postForObject(GEMINI_API_URL, request, String.class);
+        String response = restTemplate.postForObject(GEMINI_API_1_5_FLASH_8B_URL, request, String.class);
         logger.debug("Received response from Gemini API: {}", response);
 
         JSONObject jsonResponse = new JSONObject(response);
@@ -69,7 +70,8 @@ public class SpeechToTextService {
                 .getString("text");
 
         logger.info("Transcription result: {}", transcription);
-        return transcription;
+
+        return isValidTranscription(transcription)?transcription:"";
     }
 
     public boolean isValidTranscription(String transcription) {
@@ -82,6 +84,18 @@ public class SpeechToTextService {
         String cleanText = transcription.toLowerCase().trim();
         String[] noiseIndicators = { "[noise]", "[background noise]", "[inaudible]", "[silence]", "*silence*",
                 "*noise*" };
+
+        if (cleanText.contains("repetitive tapping or clicking sounds".toLowerCase()) ||
+                cleanText.contains("no discernible speech or other recognizable audio".toLowerCase()) ||
+                cleanText.contains("\"P\" sound".toLowerCase()) ||
+                cleanText.contains("contain only a repeated low-pitched humming or buzzing sound".toLowerCase()) ||
+                cleanText.contains("\"pip\" transcription".toLowerCase()) ||
+                cleanText.contains("no discernible speech or words present".toLowerCase()) ||
+                cleanText.contains("audio appears to contain".toLowerCase()) ||
+                cleanText.contains("**\"uh\"**")) {
+            logger.warn("Transcription contains only noise indicators");
+            return false;
+        }
 
         for (String indicator : noiseIndicators) {
             cleanText = cleanText.replace(indicator, "").trim();

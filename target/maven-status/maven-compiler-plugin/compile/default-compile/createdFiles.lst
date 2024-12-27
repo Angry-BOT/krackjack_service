@@ -1,1 +1,7 @@
-com/krackjack/services/ServicesApplication.class
+com/krackjack/config/LoggingConfig.class
+com/krackjack/services/GeminiService.class
+com/krackjack/services/KrackjackServicesApplication.class
+com/krackjack/config/WebSocketConfig.class
+com/krackjack/config/RestTemplateConfig.class
+com/krackjack/services/SpeechToTextService.class
+com/krackjack/handler/InterviewWebSocketHandler.class
