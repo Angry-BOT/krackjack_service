@@ -70,21 +70,21 @@ A Spring Boot-based backend service that provides real-time interview capabiliti
 ## Project Structure
 
 src/main/java/com/krackjack/
-├── config/
-│ ├── WebSocketConfig.java # WebSocket and thread pool configuration
-│ ├── DatabaseConfig.java # Database connection setup
-│ └── RestTemplateConfig.java # HTTP client configuration
-├── handler/
-│ └── InterviewWebSocketHandler.java # WebSocket message processing
-├── services/
-│ ├── SpeechToTextService.java # Audio transcription using Gemini
-│ └── GeminiService.java # AI response generation
-├── entity/
-│ ├── ChatSession.java # Interview session entity
-│ └── ChatMessage.java # Message entity
-└── repository/
-├── ChatSessionRepository.java
-└── ChatMessageRepository.java
+- config/
+  - WebSocketConfig.java # WebSocket and thread pool configuration
+  - DatabaseConfig.java # Database connection setup
+  - RestTemplateConfig.java # HTTP client configuration
+- handler/
+  - InterviewWebSocketHandler.java # WebSocket message processing
+- services/
+  - SpeechToTextService.java # Audio transcription using Gemini
+  - GeminiService.java # AI response generation
+- entity/
+  - ChatSession.java # Interview session entity
+  - ChatMessage.java # Message entity
+- repository/
+  - ChatSessionRepository.java
+  - ChatMessageRepository.java
 
 ## Error Handling
 
