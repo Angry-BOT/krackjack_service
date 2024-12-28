@@ -1,7 +1,11 @@
-com/krackjack/config/LoggingConfig.class
+com/krackjack/config/DatabaseConfig.class
+com/krackjack/repository/ChatSessionRepository.class
 com/krackjack/services/GeminiService.class
 com/krackjack/services/KrackjackServicesApplication.class
-com/krackjack/config/WebSocketConfig.class
+com/krackjack/repository/ChatMessageRepository.class
+com/krackjack/entity/ChatSession.class
+com/krackjack/config/LoggingConfig.class
+com/krackjack/entity/ChatMessage.class
 com/krackjack/config/RestTemplateConfig.class
 com/krackjack/services/SpeechToTextService.class
 com/krackjack/handler/InterviewWebSocketHandler.class

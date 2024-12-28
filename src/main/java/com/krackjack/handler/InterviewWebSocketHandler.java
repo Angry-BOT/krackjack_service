@@ -13,8 +13,16 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.krackjack.entity.ChatSession;
+import com.krackjack.repository.ChatSessionRepository;
+import com.krackjack.entity.ChatMessage;
+import com.krackjack.repository.ChatMessageRepository;
+import java.time.LocalDateTime;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.core.task.TaskExecutor;
 
 @Component
+@Transactional
 public class InterviewWebSocketHandler extends BinaryWebSocketHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(InterviewWebSocketHandler.class);
@@ -22,87 +30,85 @@ public class InterviewWebSocketHandler extends BinaryWebSocketHandler {
     private final SpeechToTextService speechToTextService;
     private final GeminiService geminiService;
     private final ObjectMapper objectMapper;
+    private final ChatSessionRepository chatSessionRepository;
+    private final ChatMessageRepository chatMessageRepository;
+    private final TaskExecutor webSocketTaskExecutor;
     private final Map<WebSocketSession, String> sessionContexts = new ConcurrentHashMap<>();
 
     public InterviewWebSocketHandler(SpeechToTextService speechToTextService,
             GeminiService geminiService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            ChatSessionRepository chatSessionRepository,
+            ChatMessageRepository chatMessageRepository,
+            TaskExecutor webSocketTaskExecutor) {
         this.speechToTextService = speechToTextService;
         this.geminiService = geminiService;
         this.objectMapper = objectMapper;
+        this.chatSessionRepository = chatSessionRepository;
+        this.chatMessageRepository = chatMessageRepository;
+        this.webSocketTaskExecutor = webSocketTaskExecutor;
         logger.info("InterviewWebSocketHandler initialized");
-    }
-
-    public String setContext(WebSocketSession session, String jobDescription, String intervieweeBackground) {
-        logger.info("Setting context for session: {}", session.getId());
-        String context = String.format("Job Description: %s | Interviewee Background: %s", jobDescription,
-                intervieweeBackground);
-        try {
-            sessionContexts.put(session, context);
-            session.sendMessage(new TextMessage("{\"type\":\"context_set\"}"));
-            logger.info("Context set successfully for session: {}", session.getId());
-        } catch (IOException e) {
-            logger.error("Error setting context for session: {}", session.getId(), e);
-            throw new RuntimeException("Failed to set context", e);
-        }
-        return context;
     }
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
-        try {
-            logger.info("Received text message from session: {}", session.getId());
-            Map<String, String> setupData = objectMapper.readValue(message.getPayload(), Map.class);
-            if ("setup".equals(setupData.get("type"))) {
-                setContext(session, setupData.get("jobDescription"), setupData.get("intervieweeBackground"));
-                logger.info("Setup completed for session: {}", session.getId());
-            }
-        } catch (IOException e) {
-            logger.error("Error handling text message for session: {}", session.getId(), e);
+        webSocketTaskExecutor.execute(() -> {
             try {
-                session.sendMessage(
-                        new TextMessage("{\"type\":\"error\",\"message\":\"Failed to process setup message\"}"));
-            } catch (IOException sendError) {
-                logger.error("Failed to send error message to client", sendError);
+                Map<String, String> setupData = objectMapper.readValue(message.getPayload(), Map.class);
+                if ("setup".equals(setupData.get("type"))) {
+                    ChatSession chatSession = new ChatSession();
+                    chatSession.setCreatedAt(LocalDateTime.now());
+                    chatSession.setJobDescription(setupData.get("jobDescription"));
+                    chatSession.setIntervieweeBackground(setupData.get("intervieweeBackground"));
+                    chatSessionRepository.save(chatSession);
+
+                    session.getAttributes().put("sessionId", chatSession.getSessionId());
+                }
+            } catch (Exception e) {
+                logger.error("Error in handleTextMessage", e);
             }
-        }
+        });
     }
 
     @Override
     protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) {
-        try {
-            logger.info("Received binary message from session: {}", session.getId());
-            byte[] audioData = message.getPayload().array();
-            logger.debug("Audio data size: {} bytes", audioData.length);
-
-            String transcription = speechToTextService.transcribe(audioData);
-            logger.info("Transcription completed for session: {}", session.getId());
-
-            if (!speechToTextService.isValidTranscription(transcription)) {
-                sendMessageToClient(session, "error", "Could not process audio due to disturbance or silence");
-                return;
-            }
-
-            sendMessageToClient(session, "transcription", transcription);
-
-            String context = sessionContexts.get(session);
-            if (context == null) {
-                logger.warn("No context found for session: {}. Using empty context.", session.getId());
-                context = "";
-            }
-            String geminiResponse = geminiService.generateResponse(transcription, context);
-            logger.info("Gemini response generated for session: {}", session.getId());
-
-            sendMessageToClient(session, "assistant_response", geminiResponse);
-        } catch (Exception e) {
-            logger.error("Error processing binary message for session: {}", session.getId(), e);
+        webSocketTaskExecutor.execute(() -> {
             try {
-                session.sendMessage(
-                        new TextMessage("{\"type\":\"error\",\"message\":\"Failed to process audio data\"}"));
-            } catch (IOException sendError) {
-                logger.error("Failed to send error message to client", sendError);
+                String sessionId = (String) session.getAttributes().get("sessionId");
+                ChatSession chatSession = chatSessionRepository.findById(sessionId)
+                        .orElseThrow(() -> new RuntimeException("Session not found"));
+
+                // Process audio and save question
+                String transcription = speechToTextService.transcribe(message.getPayload().array());
+
+                // Send transcription to frontend first
+                sendMessageToClient(session, "transcription", transcription);
+
+                ChatMessage questionMessage = new ChatMessage();
+                questionMessage.setChatSession(chatSession);
+                questionMessage.setContent(transcription);
+                questionMessage.setMessageType("QUESTION");
+                questionMessage.setTimestamp(LocalDateTime.now());
+                chatMessageRepository.save(questionMessage);
+
+                // Generate and save response
+                String response = geminiService.generateResponse(transcription,
+                        chatSession.getJobDescription() + " | " + chatSession.getIntervieweeBackground());
+                ChatMessage answerMessage = new ChatMessage();
+                answerMessage.setChatSession(chatSession);
+                answerMessage.setContent(response);
+                answerMessage.setMessageType("ANSWER");
+                answerMessage.setTimestamp(LocalDateTime.now());
+                chatMessageRepository.save(answerMessage);
+
+                // Send response back to client
+                sendMessageToClient(session, "assistant_response", response);
+            } catch (Exception e) {
+                logger.error("Error in handleBinaryMessage", e);
+                // Send error message to frontend
+                sendMessageToClient(session, "error", "Failed to process audio message");
             }
-        }
+        });
     }
 
     private void sendMessageToClient(WebSocketSession session, String type, String content) {
