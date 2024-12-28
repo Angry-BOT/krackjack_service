@@ -25,17 +25,17 @@ A Spring Boot-based backend service that provides real-time interview capabiliti
 1. Clone the repository
 2. Create `application.properties` in `src/main/resources/`:
    - Gemini API Configuration
-     gemini.api.key=your-gemini-api-key
+     - gemini.api.key=your-gemini-api-key
    - Database Configuration
-     spring.datasource.url=jdbc:postgresql://localhost:5432/krackjack_db
-     spring.datasource.username=krackjack_local_user
-     spring.datasource.password=local@123
-     spring.jpa.hibernate.ddl-auto=update
+     - spring.datasource.url=jdbc:postgresql://localhost:5432/krackjack_db
+     - spring.datasource.username=krackjack_local_user
+     - spring.datasource.password=local@123
+     - spring.jpa.hibernate.ddl-auto=update
    - sql
-     CREATE DATABASE krackjack_db;
+     - CREATE DATABASE krackjack_db;
    - bash
-     mvn clean install
-     java -jar target/services-0.0.1-SNAPSHOT.jar
+     - mvn clean install
+     - java -jar target/services-0.0.1-SNAPSHOT.jar
 
 ## API Documentation
 
